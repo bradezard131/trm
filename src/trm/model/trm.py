@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import NamedTuple
+from functools import cached_property
+from typing import Literal, NamedTuple
 
 import torch
+import torch.nn.functional as F
 from einops import repeat
 from einops.layers.torch import Rearrange, Reduce
 from torch import Tensor, nn
@@ -89,7 +91,6 @@ class TRMPrediction(NamedTuple):
 class TinyRecursiveModel(nn.Module):
     def __init__(
         self,
-        dim: int,
         embeddings: TRMEmbeddings,
         inner_model: nn.Module,
         *,
@@ -99,10 +100,12 @@ class TinyRecursiveModel(nn.Module):
         super().__init__()
         self.embeddings = embeddings
         self.inner_model = inner_model
-        self.token_pred = nn.Linear(dim, self.embeddings.num_tokens, bias=False)
+        self.token_pred = nn.Linear(
+            embeddings.dim, self.embeddings.num_tokens, bias=False
+        )
         self.halt_pred = nn.Sequential(
             Reduce("batch seq dim -> batch dim", "mean"),
-            nn.Linear(dim, 1, bias=False),
+            nn.Linear(embeddings.dim, 1, bias=False),
             Rearrange("batch 1 -> batch"),
         )
         self.refinement_iters = refinement_iters
@@ -172,12 +175,10 @@ class TinyRecursiveModel(nn.Module):
             predictions=token_preds[sort_indices], exit_steps=exit_steps_t[sort_indices]
         )
 
-    def forward(
-        self,
-        x: Tensor,
-    ) -> TRMTrainPrediction:
+    def forward(self, x: Tensor, state: TRMState | None = None) -> TRMTrainPrediction:
         x = self.embeddings.embed_tokens(x)
-        state = self.embeddings.get_init_state(x)
+        if state is None:
+            state = self.embeddings.get_init_state(x)
         state = self.deep_refinement(x, state)
         outputs = self.embeddings.strip_registers(state.outputs)
         token_logits = self.token_pred(outputs)
@@ -186,3 +187,43 @@ class TinyRecursiveModel(nn.Module):
         return TRMTrainPrediction(
             logits=token_logits, halt_logits=halt_logits, state=state
         )
+
+    # for type-checking benefits
+    def __call__(self, x: Tensor, state: TRMState | None = None) -> TRMTrainPrediction:
+        return super().__call__(x, state=state)
+
+
+class TRMLoss(NamedTuple):
+    token: Tensor
+    halt: Tensor
+    halt_weight: float = 1.0
+
+    @property
+    def total(self) -> Tensor:
+        return self.token + self.halt_weight * self.halt
+
+    def reduce(self, reduction: Literal["mean", "sum"] = "sum") -> Tensor:
+        match reduction:
+            case "mean":
+                return self.total.mean()
+            case "sum":
+                return self.total.sum()
+            case _:
+                msg = f"Unknown reduction: {reduction}"
+                raise ValueError(msg)
+
+
+def trm_step_loss(
+    preds: TRMTrainPrediction, targets: Tensor, halt_weight: float = 1.0
+) -> TRMLoss:
+    token_loss = F.cross_entropy(
+        preds.logits.transpose(1, 2), targets, reduction="none"
+    )
+
+    with torch.no_grad():
+        should_halt = (preds.logits.argmax(-1) == targets).all(-1).float()
+    halt_loss = F.binary_cross_entropy_with_logits(
+        preds.halt_logits, should_halt, reduction="none"
+    )
+
+    return TRMLoss(token=token_loss.mean(1), halt=halt_loss, halt_weight=halt_weight)

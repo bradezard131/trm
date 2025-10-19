@@ -1,19 +1,20 @@
 from collections.abc import Callable
+from functools import partial
 from typing import NamedTuple
 
-from einops.layers.torch import Rearrange
 from torch import Tensor, nn
 
 
-class PreNormResidual(nn.Module):
+class PreNormResidual[T: nn.Module](nn.Module):
     def __init__(
         self,
         dim: int,
-        func: nn.Module,
+        func: T,
         *,
         norm_layer: Callable[[int], nn.Module] = nn.LayerNorm,
     ) -> None:
         super().__init__()
+        self.dim = dim
         self.norm = norm_layer(dim)
         self.func = func
 
@@ -29,12 +30,13 @@ class Mlp(nn.Sequential):
         dropout: float = 0.0,
         *,
         act_fn: Callable[[], nn.Module] = nn.GELU,
+        dense_layer: Callable[[int, int], nn.Module] = nn.Linear,
     ) -> None:
         super().__init__(
-            nn.Linear(dim, latent_dim),
+            dense_layer(dim, latent_dim),
             act_fn(),
             nn.Dropout(dropout),
-            nn.Linear(latent_dim, dim),
+            dense_layer(latent_dim, dim),
             nn.Dropout(dropout),
         )
 
@@ -43,21 +45,40 @@ class MixerBlockConfig(NamedTuple):
     expansion: float = 4.0
     compression: float = 0.5
     dropout: float = 0.0
+    norm_layer: Callable[[int], nn.Module] = nn.LayerNorm
 
 
 class MixerBlock1D(nn.Sequential):
     def __init__(
         self,
         dim: int,
+        tokens: int,
         config: MixerBlockConfig,
     ) -> None:
+        self.dim = dim
+        self.tokens = tokens
         expansion_dim = round(config.expansion * dim)
         compression_dim = round(config.compression * dim)
+        # Conv over the feature dimension = spatial mixing
+        spatial_mix_layer = partial(nn.Conv1d, kernel_size=1)
         super().__init__(
-            PreNormResidual(dim, Mlp(dim, expansion_dim, dropout=config.dropout)),
-            Rearrange("batch seq dim -> batch dim seq"),
-            PreNormResidual(dim, Mlp(dim, compression_dim, dropout=config.dropout)),
-            Rearrange("batch dim seq -> batch seq dim"),
+            PreNormResidual(
+                dim,
+                Mlp(
+                    tokens,
+                    expansion_dim,
+                    dropout=config.dropout,
+                    dense_layer=spatial_mix_layer,
+                ),
+            ),
+            PreNormResidual(
+                dim,
+                Mlp(
+                    dim,
+                    compression_dim,
+                    dropout=config.dropout,
+                ),
+            ),
         )
 
 
@@ -65,13 +86,22 @@ class Mixer1D(nn.Sequential):
     def __init__(
         self,
         dim: int,
+        tokens: int,
         depth: int,
         block_config: MixerBlockConfig | None = None,
         *,
         norm_layer: Callable[[int], nn.Module] = nn.LayerNorm,
     ) -> None:
-        block_config = block_config or MixerBlockConfig()
+        block_config = block_config or MixerBlockConfig(norm_layer=norm_layer)
         super().__init__(
-            *[MixerBlock1D(dim, block_config) for _ in range(depth)],
+            *[MixerBlock1D(dim, tokens, block_config) for _ in range(depth)],
             norm_layer(dim),
         )
+
+    @property
+    def dim(self) -> int:
+        return self[0].dim  # type: ignore[return-value]
+
+    @property
+    def tokens(self) -> int:
+        return self[0].tokens  # type: ignore[return-value]
