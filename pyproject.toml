@@ -13,6 +13,14 @@ dependencies = [
     "torch>=2.9.0",
 ]
 
+[tool.pyrefly]
+project-includes = ["**/*"]
+project-excludes = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/*venv/**/*",
+]
+
 [project.scripts]
 trm = "trm:main"
 
@@ -26,3 +34,5 @@ dev = [
     "pyrefly>=0.37.0",
     "pytest>=8.4.2",
 ]
+
+[tool]
