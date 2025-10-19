@@ -1,0 +1,17 @@
+[project]
+name = "trm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Brad Ezard", email = "brad@bradezard.me" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+trm = "trm:main"
+
+[build-system]
+requires = ["uv_build>=0.9.2,<0.10.0"]
+build-backend = "uv_build"
