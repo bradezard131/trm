@@ -14,6 +14,7 @@ __all__ = ["Trainer"]
 logger = getLogger(__name__)
 CPU_DEVICE: Final[torch.device] = torch.device("cpu")
 
+
 class Trainer:
     def __init__(
         self,
