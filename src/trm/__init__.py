@@ -52,14 +52,12 @@ def main(  # noqa: PLR0913
             difficulty=32,
             rng=rng_seed,
             executor=tpx,
-            mode="train",
         )
         val_dataset = make_sudoku_dataset(
             num_puzzles=128 * 5,
             difficulty=32,
             rng=rng_seed + 1,
             executor=tpx,
-            mode="val",
         )
     logger.info(
         "Dataset built. Train size: %d, Val size: %d",

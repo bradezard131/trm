@@ -22,7 +22,7 @@ def make_sudoku_dataset(
     rng: np.random.Generator | int | None = None,
     executor: Executor | None = None,
     *,
-    mode: Literal["train", "val"] = "val",
+    mode: Literal["augment", "plain"] = "plain",
 ) -> sudoku_dataset.SudokuDataset:
     answers = sudoku_dataset.generate_answers(num_puzzles, rng=rng, executor=executor)
     puzzle_generator = sudoku_dataset.SudokuPuzzleGenerator(
@@ -31,7 +31,7 @@ def make_sudoku_dataset(
     ds = sudoku_dataset.SudokuDataset(
         answers=answers,
         puzzle_generator=puzzle_generator,
-        rng=(rng if mode == "train" else None),
+        rng=(rng if mode == "augment" else None),
     )
     logger.debug("Example dataset answer: %s", str(ds[0].answer))
     logger.debug("Example dataset problem: %s", str(ds[0].puzzle))
