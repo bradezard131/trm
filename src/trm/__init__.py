@@ -29,6 +29,15 @@ def _get_device() -> torch.device:
     return torch.device("cpu")
 
 
+def configure_logging_format() -> None:
+    log_format = "[%(asctime)s][%(levelname)s] %(message)s (%(filename)s:%(lineno)d)"
+    basicConfig(
+        level=os.environ.get("TRM_LOG_LEVEL", "INFO"),
+        format=log_format,
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
 def main(  # noqa: PLR0913
     *,
     trm_dim: int = 384,
@@ -44,7 +53,7 @@ def main(  # noqa: PLR0913
     rng_seed: int = 42,
 ) -> None:
     device = _get_device()
-    basicConfig(level=os.environ.get("TRM_LOG_LEVEL", "INFO"))
+    configure_logging_format()
 
     with ProcessPoolExecutor() as tpx:
         train_dataset = make_sudoku_dataset(
@@ -114,7 +123,7 @@ def main(  # noqa: PLR0913
 
 def overfit() -> None:
     device = _get_device()
-    basicConfig(level=os.environ.get("TRM_LOG_LEVEL", "INFO"))
+    configure_logging_format()
 
     model = make_mlp_tiny_recursive_model(
         dim=512,
