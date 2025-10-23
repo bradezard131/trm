@@ -4,6 +4,14 @@ from typing import NamedTuple
 
 from torch import Tensor, nn
 
+__all__ = [
+    "Mixer1D",
+    "MixerBlock1D",
+    "MixerBlockConfig",
+    "Mlp",
+    "PreNormResidual",
+]
+
 
 class PreNormResidual[T: nn.Module](nn.Module):
     def __init__(
@@ -62,6 +70,7 @@ class MixerBlock1D(nn.Sequential):
         # Conv over the feature dimension = spatial mixing
         spatial_mix_layer = partial(nn.Conv1d, kernel_size=1)
         super().__init__(
+            # Spatial mixing block
             PreNormResidual(
                 dim,
                 Mlp(
@@ -71,6 +80,7 @@ class MixerBlock1D(nn.Sequential):
                     dense_layer=spatial_mix_layer,
                 ),
             ),
+            # Feature mixing block
             PreNormResidual(
                 dim,
                 Mlp(
@@ -83,6 +93,7 @@ class MixerBlock1D(nn.Sequential):
 
 
 class Mixer1D(nn.Sequential):
+    """A 1D (Batch * Sequence * Dim) MLP Mixer model"""
     def __init__(
         self,
         dim: int,

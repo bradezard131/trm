@@ -1,13 +1,19 @@
 from __future__ import annotations
 
-from functools import cached_property
-from typing import Literal, NamedTuple
+from typing import NamedTuple
 
 import torch
-import torch.nn.functional as F
 from einops import repeat
 from einops.layers.torch import Rearrange, Reduce
 from torch import Tensor, nn
+
+__all__ = [
+    "TRMEmbeddings",
+    "TRMPrediction",
+    "TRMState",
+    "TRMTrainPrediction",
+    "TinyRecursiveModel",
+]
 
 
 class TRMState(NamedTuple):
@@ -19,14 +25,23 @@ class TRMState(NamedTuple):
 
 
 class TRMEmbeddings(nn.Module):
+    """Learnable embeddings for the Tiny Recursive Model:
+    - Input token embeddings
+    - Output initialisation
+    - Latent initialisation
+    - Registers
+    - Position embeddings"""
+
     def __init__(
         self,
         dim: int,
         num_tokens: int,
+        max_seq_len: int,
         num_register_tokens: int = 0,
     ) -> None:
         super().__init__()
         self.input_embedding = nn.Embedding(num_tokens, dim)
+        self.position_embedding = nn.Embedding(max_seq_len, dim)
         self.output_init_embed = nn.Parameter(torch.empty(dim))
         self.latent_init_embed = nn.Parameter(torch.empty(dim))
         self.register_tokens = nn.Parameter(torch.empty(num_register_tokens, dim))
@@ -34,6 +49,7 @@ class TRMEmbeddings(nn.Module):
 
     def reset_parameters(self) -> None:
         self.input_embedding.reset_parameters()
+        self.position_embedding.reset_parameters()
 
         def _init(tensor: Tensor) -> None:
             nn.init.normal_(tensor.data, mean=0.0, std=0.02)
@@ -50,8 +66,16 @@ class TRMEmbeddings(nn.Module):
     def dim(self) -> int:
         return self.input_embedding.embedding_dim
 
+    @property
+    def max_seq_len(self) -> int:
+        return self.position_embedding.num_embeddings
+
+    def generate_position_embeddings(self, x: Tensor) -> Tensor:
+        positions = torch.arange(x.size(1), device=x.device).unsqueeze(0)  # (1, seq)
+        return self.position_embedding(positions)  # (1, seq, dim)
+
     def embed_tokens(self, tokens: Tensor) -> Tensor:
-        x = self.input_embedding(tokens)
+        x = self.input_embedding(tokens) + self.generate_position_embeddings(tokens)
         registers = repeat(
             self.register_tokens,
             "registers dim -> batch registers dim",
@@ -188,42 +212,6 @@ class TinyRecursiveModel(nn.Module):
             logits=token_logits, halt_logits=halt_logits, state=state
         )
 
-    # for type-checking benefits
+    # for type-checking benefits only
     def __call__(self, x: Tensor, state: TRMState | None = None) -> TRMTrainPrediction:
         return super().__call__(x, state=state)
-
-
-class TRMLoss(NamedTuple):
-    token: Tensor
-    halt: Tensor
-    halt_weight: float = 1.0
-
-    @property
-    def total(self) -> Tensor:
-        return self.token + self.halt_weight * self.halt
-
-    def reduce(self, reduction: Literal["mean", "sum"] = "sum") -> Tensor:
-        match reduction:
-            case "mean":
-                return self.total.mean()
-            case "sum":
-                return self.total.sum()
-            case _:
-                msg = f"Unknown reduction: {reduction}"
-                raise ValueError(msg)
-
-
-def trm_step_loss(
-    preds: TRMTrainPrediction, targets: Tensor, halt_weight: float = 1.0
-) -> TRMLoss:
-    token_loss = F.cross_entropy(
-        preds.logits.transpose(1, 2), targets, reduction="none"
-    )
-
-    with torch.no_grad():
-        should_halt = (preds.logits.argmax(-1) == targets).all(-1).float()
-    halt_loss = F.binary_cross_entropy_with_logits(
-        preds.halt_logits, should_halt, reduction="none"
-    )
-
-    return TRMLoss(token=token_loss.mean(1), halt=halt_loss, halt_weight=halt_weight)
