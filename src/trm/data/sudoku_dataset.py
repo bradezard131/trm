@@ -7,6 +7,7 @@ import numpy.typing as npt
 from torch.utils.data import Dataset
 
 from trm.data.sudoku import generate_sudoku, remove_numbers_inplace
+from trm.data.transform import augment_sudoku_batch_inplace
 
 if TYPE_CHECKING:
     from concurrent.futures.thread import Executor
@@ -76,6 +77,7 @@ class SudokuDataset(Dataset[SudokuSample]):
         self,
         answers: tuple[npt.NDArray[np.int8], ...],
         puzzle_generator: SudokuPuzzleGenerator,
+        rng: np.random.Generator | int | None = None,
     ) -> None:
         if not all(p.shape == (9, 9) for p in answers):
             msg = "All puzzles must have shape (9, 9)."
@@ -83,9 +85,16 @@ class SudokuDataset(Dataset[SudokuSample]):
 
         self.answers = answers
         self.puzzle_generator = puzzle_generator
+        if isinstance(rng, int):
+            rng = np.random.default_rng(rng)
+        self.rng = rng
 
     def __len__(self) -> int:
         return len(self.answers)
 
     def __getitem__(self, index: int) -> SudokuSample:
-        return self.puzzle_generator(self.answers[index])
+        answers = self.answers[index]
+        if self.rng is not None:
+            answers = answers.copy()
+            augment_sudoku_batch_inplace(answers, self.rng)
+        return self.puzzle_generator(answers)

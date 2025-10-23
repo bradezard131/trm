@@ -1,6 +1,7 @@
 import os
 from concurrent.futures import ProcessPoolExecutor
 from logging import basicConfig, getLogger
+from math import ceil
 
 import torch
 from torch.utils.data import DataLoader, random_split
@@ -46,14 +47,20 @@ def main(  # noqa: PLR0913
     basicConfig(level=os.environ.get("TRM_LOG_LEVEL", "INFO"))
 
     with ProcessPoolExecutor() as tpx:
-        full_dataset = make_sudoku_dataset(
-            num_puzzles=128 * 25, difficulty=32, rng=rng_seed, executor=tpx
+        train_dataset = make_sudoku_dataset(
+            num_puzzles=128 * 25,
+            difficulty=32,
+            rng=rng_seed,
+            executor=tpx,
+            mode="train",
         )
-    train_dataset, val_dataset = random_split(
-        full_dataset,
-        (0.8, 0.2),
-        torch.random.default_generator(rng_seed),  # pyrefly: ignore[not-callable]
-    )
+        val_dataset = make_sudoku_dataset(
+            num_puzzles=128 * 5,
+            difficulty=32,
+            rng=rng_seed + 1,
+            executor=tpx,
+            mode="val",
+        )
     logger.info(
         "Dataset built. Train size: %d, Val size: %d",
         len(train_dataset),
@@ -74,6 +81,8 @@ def main(  # noqa: PLR0913
         num_workers=2,
         pin_memory=True,
     )
+    warmup_epochs = ceil(warmup_steps / len(train_dataloader))
+    rest_epochs = epochs - warmup_epochs
 
     logger.info("Initialising model...")
     model = make_mlp_tiny_recursive_model(
@@ -85,9 +94,6 @@ def main(  # noqa: PLR0913
         refinement_iters=refinement_iters,
         latent_refinement_iters=latent_refinement_iters,
     ).to(device)
-    ema_model = torch.optim.swa_utils.AveragedModel(
-        model, multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(0.999)
-    )
 
     logger.info("Setting up optimizer and scheduler...")
     opt = torch.optim.AdamW(
@@ -101,9 +107,10 @@ def main(  # noqa: PLR0913
     )
 
     logger.info("Initializing trainer...")
-    trainer = Trainer(model, opt, sched, ema_model, device)
+    trainer = Trainer(model, opt, sched, None, device)
     logger.info("Starting training loop...")
     trainer.train(train_dataloader, epochs, recurrent_steps, val_dl=val_dataloader)
+    trainer.train(train_dataloader, rest_epochs, recurrent_steps, val_dl=val_dataloader)
     logger.info("Training complete!")
 
 

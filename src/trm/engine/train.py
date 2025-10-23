@@ -124,8 +124,14 @@ class Trainer:
         logger.info("Epoch end. Average Loss: %10.04e", avg_loss)
         return avg_loss
 
+    def _get_eval_model(self) -> TinyRecursiveModel:
+        if self.ema_model is None:
+            return self.model.eval()
+        assert isinstance(self.ema_model.module, TinyRecursiveModel)
+        return self.ema_model.module.eval()
+
     def val_one_epoch(self, dl: DataLoader) -> None:
-        self.model.eval()
+        model = self._get_eval_model()
 
         cell_count, cell_correct = 0, 0
         puzzle_count, puzzle_correct = 0, 0
@@ -134,7 +140,7 @@ class Trainer:
             for inputs_cpu, targets_cpu, _difficulties in dl:
                 inputs = inputs_cpu.to(self.device, non_blocking=True)
                 mask = inputs == 0
-                pred = self.model.predict(inputs).predictions
+                pred = model.predict(inputs).predictions
                 targets = targets_cpu.to(self.device, non_blocking=True)
                 cell_count += mask.sum().item()
                 puzzle_count += inputs.size(0)
@@ -179,4 +185,5 @@ class Trainer:
             )
             if val_dl is not None:
                 self.val_one_epoch(val_dl)
+
         logger.info("Training complete.")

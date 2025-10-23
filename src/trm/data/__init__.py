@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from logging import getLogger
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from concurrent.futures import Executor
@@ -21,13 +21,17 @@ def make_sudoku_dataset(
     difficulty: int | tuple[int, int],
     rng: np.random.Generator | int | None = None,
     executor: Executor | None = None,
+    *,
+    mode: Literal["train", "val"] = "val",
 ) -> sudoku_dataset.SudokuDataset:
     answers = sudoku_dataset.generate_answers(num_puzzles, rng=rng, executor=executor)
     puzzle_generator = sudoku_dataset.SudokuPuzzleGenerator(
         difficulty=difficulty, rng=rng
     )
     ds = sudoku_dataset.SudokuDataset(
-        answers=answers, puzzle_generator=puzzle_generator
+        answers=answers,
+        puzzle_generator=puzzle_generator,
+        rng=(rng if mode == "train" else None),
     )
     logger.debug("Example dataset answer: %s", str(ds[0].answer))
     logger.debug("Example dataset problem: %s", str(ds[0].puzzle))
