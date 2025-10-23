@@ -48,7 +48,7 @@ def main(  # noqa: PLR0913
 
     with ProcessPoolExecutor() as tpx:
         train_dataset = make_sudoku_dataset(
-            num_puzzles=128 * 25,
+            num_puzzles=128 * 20,
             difficulty=32,
             rng=rng_seed,
             executor=tpx,
