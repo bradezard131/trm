@@ -68,7 +68,7 @@ class TRMEmbeddings(nn.Module):
 
     @property
     def max_seq_len(self) -> int:
-        return self.position_embedding.num_embeddings
+        return self.position_embedding.num_embeddings + self.register_tokens.size(0)
 
     def generate_position_embeddings(self, x: Tensor) -> Tensor:
         positions = torch.arange(x.size(1), device=x.device).unsqueeze(0)  # (1, seq)

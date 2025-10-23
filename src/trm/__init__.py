@@ -45,11 +45,11 @@ def main(  # noqa: PLR0913
     registers: int = 0,
     refinement_iters: int = 3,
     latent_refinement_iters: int = 6,
-    learning_rate: float = 3.33e-5,
+    learning_rate: float = 1.5e-5,
     warmup_steps: int = 100,
     batch_size: int = 128,
     recurrent_steps: int = 12,
-    epochs: int = 100,
+    epochs: int = 200,
     rng_seed: int = 42,
 ) -> None:
     device = _get_device()

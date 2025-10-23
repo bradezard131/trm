@@ -21,7 +21,11 @@ def make_mlp_tiny_recursive_model(  # noqa: PLR0913
 ) -> trm.TinyRecursiveModel:
     embeddings = trm.TRMEmbeddings(dim, num_tokens, max_seq_len, num_register_tokens)
     inner_model = mixer.Mixer1D(
-        dim, max_seq_len, inner_depth, block_config, norm_layer=norm_layer
+        embeddings.dim,
+        embeddings.max_seq_len,
+        inner_depth,
+        block_config,
+        norm_layer=norm_layer,
     )
     return trm.TinyRecursiveModel(
         embeddings,
