@@ -4,7 +4,7 @@ from logging import basicConfig, getLogger
 from math import ceil
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 
 from trm.data import make_dummy_sudoku_dataset, make_sudoku_dataset
 from trm.engine.train import Trainer
