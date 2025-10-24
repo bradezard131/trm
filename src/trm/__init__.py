@@ -45,7 +45,7 @@ def main(  # noqa: PLR0913
     registers: int = 0,
     refinement_iters: int = 3,
     latent_refinement_iters: int = 6,
-    learning_rate: float = 1.5e-5,
+    learning_rate: float = 3.33e-5,
     warmup_steps: int = 100,
     batch_size: int = 128,
     recurrent_steps: int = 12,
@@ -111,6 +111,9 @@ def main(  # noqa: PLR0913
     )
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda step: min((step + 1) / warmup_steps, 1.0)
+    )
+    ema = torch.optim.swa_utils.AveragedModel(
+        model, multi_avg_fn=torch.optim.swa_utils.get_ema_multi_avg_fn(0.999)
     )
 
     logger.info("Initializing trainer...")
